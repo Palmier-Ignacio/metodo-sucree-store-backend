@@ -51,6 +51,88 @@ async function cancelPreviousPendingOrders(userId) {
   if (error) throw error
 }
 
+export async function syncCheckoutOrder(req, res, next) {
+  try {
+    const { orderId } = req.params
+
+    if (!orderId) {
+      throw new HttpError(400, 'Falta el ID de la orden.')
+    }
+
+    const { data: order, error: orderError } = await supabaseAdmin
+      .from('orders')
+      .select('id, user_id')
+      .eq('id', orderId)
+      .single()
+
+    if (orderError) throw orderError
+    if (!order) throw new HttpError(404, 'Orden no encontrada.')
+
+    if (order.user_id !== req.user.id && req.user.role !== 'admin') {
+      throw new HttpError(403, 'No tenés permiso para consultar esta orden.')
+    }
+
+    const updatedOrder = await syncOrderWithMercadoPago(orderId)
+
+    res.json({
+      order: updatedOrder,
+      status: updatedOrder.status,
+    })
+  } catch (error) {
+    next(error)
+  }
+}
+
+async function syncOrderWithMercadoPago(orderId) {
+  const { data: order, error: orderError } = await supabaseAdmin
+    .from('orders')
+    .select('id, status, total, mercadopago_id, user_id')
+    .eq('id', orderId)
+    .single()
+
+  if (orderError) throw orderError
+  if (!order) throw new HttpError(404, 'Orden no encontrada.')
+
+  if (PAID_STATUSES.includes(order.status)) {
+    return order
+  }
+
+  const search = await mercadopagoRequest(
+    `/v1/payments/search?external_reference=${encodeURIComponent(order.id)}&sort=date_created&criteria=desc`
+  )
+
+  const payments = search.results || []
+
+  const approvedPayment =
+    payments.find((payment) => PAID_STATUSES.includes(payment.status)) ||
+    payments[0]
+
+  if (!approvedPayment) {
+    return order
+  }
+
+  const status = approvedPayment.status || 'pending'
+
+  const { data: updatedOrder, error: updateError } = await supabaseAdmin
+    .from('orders')
+    .update({
+      status,
+      total: Math.round(Number(approvedPayment.transaction_amount || order.total || 0)),
+      mercadopago_id: String(approvedPayment.id),
+    })
+    .eq('id', order.id)
+    .select('*')
+    .single()
+
+  if (updateError) throw updateError
+
+  if (PAID_STATUSES.includes(status)) {
+    await grantAccessForOrder(order.id)
+  }
+
+  return updatedOrder
+}
+
 async function grantAccessForOrder(orderId) {
   const { data: order, error: orderError } = await supabaseAdmin
     .from('orders')
@@ -225,8 +307,19 @@ export async function createCheckout(req, res, next) {
 
 export async function mercadopagoWebhook(req, res, next) {
   try {
-    const paymentId = req.body?.data?.id || req.body?.id || req.query?.['data.id']
-    const type = req.body?.type || req.query?.type
+    console.log('MP WEBHOOK BODY:', req.body)
+    console.log('MP WEBHOOK QUERY:', req.query)
+
+    const paymentId =
+      req.body?.data?.id ||
+      req.body?.id ||
+      req.query?.['data.id']
+
+    const type =
+      req.body?.type ||
+      req.query?.type ||
+      req.body?.topic ||
+      req.query?.topic
 
     if (!paymentId || (type && type !== 'payment')) {
       return res.json({ ok: true })
@@ -239,22 +332,7 @@ export async function mercadopagoWebhook(req, res, next) {
       return res.json({ ok: true })
     }
 
-    const status = payment.status || 'unknown'
-
-    const { error: updateError } = await supabaseAdmin
-      .from('orders')
-      .update({
-        status,
-        total: Math.round(Number(payment.transaction_amount || 0)),
-        mercadopago_id: String(payment.id),
-      })
-      .eq('id', orderId)
-
-    if (updateError) throw updateError
-
-    if (PAID_STATUSES.includes(status)) {
-      await grantAccessForOrder(orderId)
-    }
+    await syncOrderWithMercadoPago(orderId)
 
     res.json({ ok: true })
   } catch (error) {
