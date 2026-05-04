@@ -1,13 +1,25 @@
 import { supabaseAdmin } from '../config/supabase.js'
 import { HttpError } from '../utils/httpError.js'
 
-export async function getProducts(_req, res, next) {
+export async function getProducts(req, res, next) {
   try {
-    const { data, error } = await supabaseAdmin
+    const { featured } = req.query
+
+    let query = supabaseAdmin
       .from('products')
-      .select('id, title, subtitle, description, price, type, cover_url, badge, status, is_active, created_at, discount_percent')
+      .select('id, title, subtitle, description, price, type, cover_url, badge, status, is_active, created_at, discount_percent, is_featured_home, featured_home_order')
       .eq('is_active', true)
-      .order('created_at', { ascending: false })
+
+    if (featured === 'true') {
+      query = query
+        .eq('is_featured_home', true)
+        .order('featured_home_order', { ascending: true })
+        .limit(3)
+    } else {
+      query = query.order('created_at', { ascending: false })
+    }
+
+    const { data, error } = await query
 
     if (error) throw error
 
