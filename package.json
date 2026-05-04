@@ -14,7 +14,9 @@
     "dotenv": "latest",
     "express": "latest",
     "helmet": "latest",
-    "morgan": "latest"
+    "mercadopago": "^2.12.0",
+    "morgan": "latest",
+    "nodemailer": "^8.0.7"
   },
   "devDependencies": {
     "nodemon": "latest"

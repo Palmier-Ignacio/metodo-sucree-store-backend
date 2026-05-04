@@ -35,7 +35,9 @@ export async function getMyLibrary(req, res, next) {
         .from('orders')
         .select('id, status, total, mercadopago_id, created_at')
         .eq('user_id', req.user.id)
-        .order('created_at', { ascending: false }),
+        .neq('status', 'cancelled')
+        .order('created_at', { ascending: false })
+        .limit(30),
     ])
 
     if (libraryResponse.error) throw libraryResponse.error
@@ -81,7 +83,9 @@ export async function getMyOrders(req, res, next) {
         )
       `)
       .eq('user_id', req.user.id)
+      .neq('status', 'cancelled')
       .order('created_at', { ascending: false })
+      .limit(30)
 
     if (error) throw error
 

@@ -11,11 +11,15 @@ export const env = {
   supabaseAnonKey: process.env.SUPABASE_ANON_KEY,
   mercadopagoAccessToken: process.env.MERCADOPAGO_ACCESS_TOKEN,
   mercadopagoWebhookSecret: process.env.MERCADOPAGO_WEBHOOK_SECRET,
+  mercadopagoNotificationUrl: process.env.MERCADOPAGO_NOTIFICATION_URL,
   r2AccountId: process.env.R2_ACCOUNT_ID,
   r2AccessKeyId: process.env.R2_ACCESS_KEY_ID,
   r2SecretAccessKey: process.env.R2_SECRET_ACCESS_KEY,
   r2BucketName: process.env.R2_BUCKET_NAME,
   r2PublicUrl: process.env.R2_PUBLIC_URL,
+  gmailUser: process.env.GMAIL_USER,
+  gmailAppPassword: process.env.GMAIL_APP_PASSWORD,
+  contactReceiverEmail: process.env.CONTACT_RECEIVER_EMAIL || process.env.GMAIL_USER,
 }
 
 export function validateRequiredEnv() {
