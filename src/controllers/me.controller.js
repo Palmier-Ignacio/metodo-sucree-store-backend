@@ -112,8 +112,21 @@ export async function requestDownload(req, res, next) {
       throw new HttpError(403, 'No tenés acceso a este producto.')
     }
 
-    res.status(501).json({
-      message: 'Descargas todavía no configuradas. Próximo paso: Cloudflare R2.',
+    const { data: product, error: productError } = await supabaseAdmin
+      .from('products')
+      .select('title, file_path')
+      .eq('id', productId)
+      .single()
+
+    if (productError) throw productError
+
+    if (!product?.file_path) {
+      throw new HttpError(404, 'Archivo no configurado.')
+    }
+
+    res.json({
+      url: product.file_path,
+      title: product.title,
     })
   } catch (error) {
     next(error)

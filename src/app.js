@@ -10,6 +10,7 @@ import contactRoutes from './routes/contact.routes.js'
 import checkoutRoutes from './routes/checkout.routes.js'
 import meRoutes from './routes/me.routes.js'
 import productsRoutes from './routes/products.routes.js'
+import authRoutes from './routes/auth.routes.js'
 
 const app = express()
 
@@ -28,6 +29,7 @@ app.use('/api/contact', contactRoutes)
 app.use('/api/me', meRoutes)
 app.use('/api/admin', adminRoutes)
 app.use('/api/checkout', checkoutRoutes)
+app.use('/api/auth', authRoutes)
 
 app.use(notFoundMiddleware)
 app.use(errorMiddleware)
