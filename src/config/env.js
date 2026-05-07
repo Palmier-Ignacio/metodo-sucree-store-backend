@@ -20,6 +20,7 @@ export const env = {
   gmailUser: process.env.GMAIL_USER,
   gmailAppPassword: process.env.GMAIL_APP_PASSWORD,
   contactReceiverEmail: process.env.CONTACT_RECEIVER_EMAIL || process.env.GMAIL_USER,
+  resendApiKey: process.env.RESEND_API_KEY,
 }
 
 export function validateRequiredEnv() {

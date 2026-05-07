@@ -1,6 +1,7 @@
 import { env } from '../config/env.js'
 import { supabaseAdmin } from '../config/supabase.js'
 import { HttpError } from '../utils/httpError.js'
+import { sendOrderConfirmationEmail } from '../services/orderEmail.service.js'
 
 const PAID_STATUSES = ['approved', 'paid', 'completed', 'success', 'accredited']
 
@@ -84,6 +85,7 @@ export async function syncCheckoutOrder(req, res, next) {
 }
 
 async function syncOrderWithMercadoPago(orderId) {
+  console.log('[SYNC ORDER] iniciando', orderId)
   const { data: order, error: orderError } = await supabaseAdmin
     .from('orders')
     .select('id, status, total, mercadopago_id, user_id')
@@ -94,6 +96,9 @@ async function syncOrderWithMercadoPago(orderId) {
   if (!order) throw new HttpError(404, 'Orden no encontrada.')
 
   if (PAID_STATUSES.includes(order.status)) {
+    await grantAccessForOrder(order.id)
+    await sendOrderConfirmationForOrder(order.id)
+
     return order
   }
 
@@ -128,6 +133,7 @@ async function syncOrderWithMercadoPago(orderId) {
 
   if (PAID_STATUSES.includes(status)) {
     await grantAccessForOrder(order.id)
+    await sendOrderConfirmationForOrder(order.id)
   }
 
   return updatedOrder
@@ -166,6 +172,61 @@ async function grantAccessForOrder(orderId) {
     .upsert(accessRows, { onConflict: 'user_id,product_id' })
 
   if (accessError) throw accessError
+}
+
+async function sendOrderConfirmationForOrder(orderId) {
+  console.log('[EMAIL ORDER] buscando orden', orderId)
+
+  const { data: order, error } = await supabaseAdmin
+    .from('orders')
+    .select(`
+      id,
+      total,
+      status,
+      created_at,
+      buyer_email,
+      confirmation_email_sent_at,
+
+      items:order_items (
+        id,
+        price,
+
+        product:products (
+          id,
+          title
+        )
+      )
+    `)
+    .eq('id', orderId)
+    .single()
+
+  console.log('[EMAIL ORDER] orden encontrada', order)
+
+  if (error) throw error
+  if (!order) return
+
+  if (order.confirmation_email_sent_at) {
+    console.log('[EMAIL ORDER] email ya enviado')
+
+    return
+  }
+
+  console.log('[EMAIL ORDER] enviando email a', order.buyer_email)
+
+  await sendOrderConfirmationEmail(order)
+
+  console.log('[EMAIL ORDER] email enviado correctamente')
+
+  const { error: updateError } = await supabaseAdmin
+    .from('orders')
+    .update({
+      confirmation_email_sent_at: new Date().toISOString(),
+    })
+    .eq('id', orderId)
+
+  if (updateError) {
+    console.error('[EMAIL ORDER] error guardando timestamp', updateError)
+  }
 }
 
 export async function createCheckout(req, res, next) {
@@ -224,12 +285,11 @@ export async function createCheckout(req, res, next) {
 
     const total = orderItems.reduce((sum, item) => sum + item.price, 0)
 
-    await cancelPreviousPendingOrders(req.user.id)
-
     const { data: order, error: orderError } = await supabaseAdmin
       .from('orders')
       .insert({
         user_id: req.user.id,
+        buyer_email: req.user.email,
         status: total > 0 ? 'pending' : 'paid',
         total,
         mercadopago_id: null,
